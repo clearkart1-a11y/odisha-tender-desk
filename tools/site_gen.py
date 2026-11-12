@@ -24,7 +24,7 @@ def slug(s):
     return s or 'na'
 
 def inr(v):
-    if v is None: return '–'
+    if not v: return '–'
     if v >= 1e7: return f'₹{v/1e7:,.2f} Cr'
     if v >= 1e5: return f'₹{v/1e5:,.1f} L'
     return f'₹{v:,.0f}'
@@ -58,6 +58,8 @@ for a, d in zip(OPEN, od):
     a['pubd'] = pdate(a.get('pub'))
     a['url'] = '/tenders/' + slug(a['id']) + '/'
     m = MIX.get(a['id']); a['wt'] = m['cls'] if m else None
+    a['est_boq'] = False
+    if not a['est'] and m and m.get('boq_total'): a['est'] = float(m['boq_total']); a['est_boq'] = True
 
 def market(rows):
     if not rows: return None
@@ -112,18 +114,26 @@ def mixbar(m, top=6):
 
 def mkt_block(m, label):
     if not m or m['n'] < 5:
-        return f'<p class="muted">Not enough 2026 results in {E(label)} yet for a reliable picture.</p>'
-    return (f'<div class="kpis"><div><span>Tenders decided (2026)</span><b>{m["n"]:,}</b></div><div><span>Median winning bid</span><b>{pct(m["med"])}</b></div>'
-            f'<div><span>Won at par (0 to −1%)</span><b>{m["par"]:.0%}</b></div><div><span>Won below −15%</span><b>{m["deep"]:.0%}</b></div><div><span>Average bidders</span><b>{m["bid"]:.1f}</b></div></div>')
+        return f'<p class="muted">Not enough 2026 results in {E(label)} yet.</p>'
+    hint = ('Most are won at par and decided by draw.' if m['par'] >= .4 else
+            'Expect a fight on price.' if m['deep'] >= .5 else 'Discounts vary widely.')
+    return (f'<p class="say"><b class="big">{pct(m["med"])}</b> is the typical winning bid here '
+            f'<span class="muted">({m["n"]:,} results in 2026, about {m["bid"]:.0f} bidders each).</span> {hint}</p>')
 
-def tender_rows(rows, limit=60):
-    rows = sorted(rows, key=lambda a: (a['closed'], pdate(a.get('close')) or DT.date(2100, 1, 1)))[:limit]
-    return ('<div class="tbl"><table><thead><tr><th>Closes</th><th>Work</th><th>District</th><th class="n">Estimate</th><th>Work type</th></tr></thead><tbody>' +
-            ''.join(f'<tr><td class="n">{E((a.get("close") or "")[:11])}{" <span class=chip>closed</span>" if a["closed"] else ""}</td><td><a href="{a["url"]}">{E(a["title"][:110])}</a></td>'
-                    f'<td>{E(a["district"] or "–")}</td><td class="n">{inr(a["est"])}</td><td>{E(a["wt"] or "–")}</td></tr>' for a in rows) + '</tbody></table></div>')
+def tender_rows(rows, limit=400, fold=12, show_dist=True):
+    rows = sorted(rows, key=lambda a: (a['closed'], pdate(a.get('close')) or DT.date(2100, 1, 1)))
+    rows = ([a for a in rows if not a['closed']] or rows)[:limit]
+    def tr(a):
+        return (f'<tr><td><a href="{a["url"]}">{E(a["title"][:95])}{"…" if len(a["title"])>95 else ""}</a></td>'
+                + (f'<td>{E(a["district"] or "–")}</td>' if show_dist else '') +
+                f'<td class="n">{inr(a["est"])}</td><td class="n">{E((a.get("close") or "")[:6])}</td></tr>')
+    head = '<thead><tr><th>Work</th>' + ('<th>District</th>' if show_dist else '') + '<th class="n">Estimate</th><th class="n">Closes</th></tr></thead>'
+    tbl = lambda rs: '<div class="tbl"><table class="list">' + head + '<tbody>' + ''.join(tr(a) for a in rs) + '</tbody></table></div>'
+    if len(rows) <= fold + 3: return tbl(rows)
+    return tbl(rows[:fold]) + f'<details class="more"><summary>Show all {len(rows)} tenders</summary>{tbl(rows[fold:])}</details>'
 
-def cta(text='See who usually wins here, what they bid, and the bid that gives you the best expected profit.'):
-    return f'<aside class="cta"><div><b>Bid with the numbers</b><p>{E(text)}</p></div><a class="btn" href="/signup/">Get your free profile</a></aside>'
+def cta(text='See who usually wins here and what they bid.'):
+    return f'<p class="cta-line">{E(text)} <a href="/signup/">Get your free profile →</a></p>'
 
 # ---------------------------------------------------------------- build
 shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT + '/assets')
@@ -143,18 +153,20 @@ for a in OPEN:
         items = b['top']; k80 = b['k80']
         boq_html = (f'<section><h2>What the BOQ says</h2><p>Work type from the BOQ: <b>{E(m["cls"])}</b>. {b['n']} priced items; '
                     f'<b>{k80}</b> of them make up 80% of the value.</p>{mixbar(m["mix"])}'
-                    '<h3>Largest items in the department BOQ</h3><div class="tbl"><table><thead><tr><th>Item</th><th class="n">Qty</th><th>Unit</th><th class="n">Rate</th><th class="n">Amount</th></tr></thead><tbody>' +
+                    '<details class="more"><summary>Largest BOQ items</summary><div class="tbl"><table><thead><tr><th>Item</th><th class="n">Qty</th><th>Unit</th><th class="n">Rate</th><th class="n">Amount</th></tr></thead><tbody>' +
                     ''.join(f'<tr><td>{E(i[1][:180])}</td><td class="n">{i[2]:,.2f}</td><td>{E(i[3])}</td><td class="n">₹{i[4]:,.2f}</td><td class="n">{inr(i[5])}</td></tr>' for i in items[:6]) +
-                    '</tbody></table></div><p class="muted">Rates are the department’s estimated rates from the published BOQ, not market prices.</p></section>')
+                    '</tbody></table></div><p class="muted">Rates are the department’s estimated rates from the published BOQ, not market prices.</p></details></section>')
     else:
-        boq_html = '<section><h2>What the BOQ says</h2><p class="muted">BOQ not yet read for this tender.</p></section>'
+        boq_html = ''
     loc_label = f'{a["seg"]}' + (f', {a["district"]}' if a['district'] else '')
-    body = (f'<h1>{E(a["title"])}</h1><p class="lede">{E(a["seg"])} · {E(a["district"] or a.get("loc") or "")} · estimate {inr(a["est"])} · '
-            f'{"closed " if a["closed"] else "closes "}{E((a.get("close") or "")[:11])}</p>'
-            '<div class="grid2"><section><h2>Tender details</h2><dl class="facts">' + ''.join(f'<dt>{E(k)}</dt><dd>{E(v)}</dd>' for k, v in facts if v) + '</dl>'
-            '<p class="muted">Download documents and bid only on <a href="https://tendersodisha.gov.in/nicgep/app" rel="nofollow noopener">tendersodisha.gov.in</a>.</p></section>'
-            f'<section><h2>How this market bids</h2><p>{E(loc_label)}, 2026 results:</p>{mkt_block(seg_m if seg_m and seg_m["n"]>=5 else seg_only, loc_label)}{cta()}</section></div>'
+    emd = ('₹' + a['emd']) if a.get('emd') and a['emd'] != 'NA' else '–'
+    key = [('Estimate (BOQ total)' if a['est_boq'] else 'Estimate', inr(a['est'])), ('Closes' if not a['closed'] else 'Closed', (a.get('close') or '')[:11]), ('District', a['district'] or a.get('loc') or '–'), ('EMD', emd)]
+    body = (f'<h1 class="t">{E(a["title"])}</h1><p class="sub">{E(a["seg"])} · Tender {E(a["id"])}</p>'
+            '<div class="keys">' + ''.join(f'<div><span>{k}</span><b>{E(v)}</b></div>' for k, v in key) + '</div>'
+            f'<section><h2>How this market bids</h2>{mkt_block(seg_m if seg_m and seg_m["n"]>=5 else seg_only, loc_label)}{cta()}</section>'
             + boq_html +
+            '<details class="more"><summary>All tender details</summary><dl class="facts">' + ''.join(f'<dt>{E(k)}</dt><dd>{E(v)}</dd>' for k, v in facts if v) + '</dl>'
+            '<p class="muted">Download documents and bid only on <a href="https://tendersodisha.gov.in/nicgep/app" rel="nofollow noopener">tendersodisha.gov.in</a>.</p></details>' +
             f'<p class="links">More: <a href="/districts/{slug(a["district"])}/">{E(a["district"])} tenders</a> · <a href="/departments/{slug(a["seg"])}/">{E(a["seg"])}</a>'
             + (f' · <a href="/work-types/{WT_SLUG[m["cls"]]}/">{E(m["cls"])}</a>' if m and m['cls'] in WT_SLUG else '') + '</p>')
     desc = f'{a["title"][:110]} – {a["seg"]}, {a["district"] or a.get("loc")}. Estimate {inr(a["est"])}, closes {(a.get("close") or "")[:11]}. BOQ breakdown and how this market bids.'
@@ -165,16 +177,16 @@ for a in OPEN:
 openrows = [a for a in OPEN if not a['closed']]
 idx = [[a['id'], a['title'][:120], a['seg'], a['district'], round(a['est']), (a.get('close') or '')[:11], a['wt'] or '', a['url'], a['closed']] for a in OPEN]
 open(OUT + '/assets/tenders.json', 'w').write(json.dumps(idx, separators=(',', ':'), ensure_ascii=False))
-body = (f'<h1>Open Odisha civil tenders</h1><p class="lede">{len(openrows):,} tenders open for bidding, from {len({a["_org"] for a in OPEN})} organisations, each with its BOQ breakdown where available.</p>'
+body = (f'<h1>Open tenders</h1><p class="lede">{len(openrows):,} civil tenders open for bidding in Odisha. Search or filter, then open one to see its BOQ and how that market bids.</p>'
         '<div class="filters"><input id="q" type="search" placeholder="Search by work, tender ID or place" aria-label="Search tenders">'
         '<select id="fd" aria-label="District"><option value="">All districts</option>' + ''.join(f'<option>{E(d)}</option>' for d in DIST) + '</select>'
         '<select id="fs" aria-label="Department"><option value="">All departments</option>' + ''.join(f'<option>{E(s)}</option>' for s in SEGS) + '</select></div>'
-        '<div id="list">' + tender_rows(OPEN, 80) + '</div><p class="muted" id="cnt"></p>'
-        '<script>(async()=>{const L=await (await fetch("/assets/tenders.json")).json();const q=document.getElementById("q"),fd=document.getElementById("fd"),fs=document.getElementById("fs");'
+        '<div id="list">' + tender_rows(OPEN, 80, fold=999) + '</div><p class="muted" id="cnt"></p>'
+        '<script>(async()=>{const L=await (await fetch("/assets/tenders.json")).json();const P=new URLSearchParams(location.search);const q=document.getElementById("q"),fd=document.getElementById("fd"),fs=document.getElementById("fs");'
         'const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':"&quot;"}[c]));const inr=v=>v>=1e7?"₹"+(v/1e7).toFixed(2)+" Cr":v>=1e5?"₹"+(v/1e5).toFixed(1)+" L":"₹"+v.toLocaleString("en-IN");'
-        'function r(){const s=q.value.trim().toLowerCase();const R=L.filter(x=>(!fd.value||x[3]===fd.value)&&(!fs.value||x[2]===fs.value)&&(!s||(x[0]+" "+x[1]+" "+x[3]).toLowerCase().includes(s))).sort((a,b)=>a[8]-b[8]);'
-        'document.getElementById("list").innerHTML=\'<div class="tbl"><table><thead><tr><th>Closes</th><th>Work</th><th>District</th><th class="n">Estimate</th><th>Work type</th></tr></thead><tbody>\'+R.slice(0,150).map(x=>`<tr><td class="n">${esc(x[5])}${x[8]?" <span class=chip>closed</span>":""}</td><td><a href="${x[7]}">${esc(x[1])}</a></td><td>${esc(x[3]||"–")}</td><td class="n">${inr(x[4])}</td><td>${esc(x[6]||"–")}</td></tr>`).join("")+"</tbody></table></div>";'
-        'document.getElementById("cnt").textContent=R.length+" tenders match"+(R.length>150?"; showing 150":"");}[q,fd,fs].forEach(e=>e.addEventListener("input",r));})();</script>')
+        'function r(){const s=q.value.trim().toLowerCase();const R=L.filter(x=>(!x[8]||s)&&(!fd.value||x[3]===fd.value)&&(!fs.value||x[2]===fs.value)&&(!s||(x[0]+" "+x[1]+" "+x[3]).toLowerCase().includes(s))).sort((a,b)=>a[8]-b[8]);'
+        'document.getElementById("list").innerHTML=\'<div class="tbl"><table class="list"><thead><tr><th>Work</th><th>District</th><th class="n">Estimate</th><th class="n">Closes</th></tr></thead><tbody>\'+R.slice(0,150).map(x=>`<tr><td><a href="${x[7]}">${esc(x[1])}</a>${x[8]?" <span class=chip>closed</span>":""}</td><td>${esc(x[3]||"–")}</td><td class="n">${inr(x[4])}</td><td class="n">${esc(x[5].slice(0,6))}</td></tr>`).join("")+"</tbody></table></div>";'
+        'document.getElementById("cnt").textContent=R.length+" tenders match"+(R.length>150?"; showing 150":"");}[q,fd,fs].forEach(e=>e.addEventListener("input",r));if(P.get("q")){q.value=P.get("q");r();}})();</script>')
 page('/tenders/', 'Open Odisha Civil Tenders with BOQ Breakdown', f'{len(openrows):,} open civil tenders in Odisha with estimates, closing dates and BOQ cost mix. Filter by district and department.', body,
      crumbs=[('Tenders', '/tenders/')], prio=0.9, freq='daily')
 
@@ -189,7 +201,7 @@ for d in DIST:
             f'<section><h2>How {E(d)} bids</h2>{mkt_block(m, d)}' +
             (f'<div class="tbl"><table><thead><tr><th>Department</th><th class="n">Tenders</th><th class="n">Median winning bid</th><th class="n">Won at par</th></tr></thead><tbody>{segtbl}</tbody></table></div>' if segtbl else '') +
             f'</section>{cta(f"See every regular bidder in {d}, what they usually quote, and your win chance at any bid.")}'
-            f'<section><h2>Open tenders in {E(d)}</h2>{tender_rows(rows_o)}</section>')
+            f'<section><h2>Open tenders in {E(d)}</h2>{tender_rows(rows_o, show_dist=False)}</section>')
     jl = [{"@context": "https://schema.org", "@type": "Dataset", "name": f"Odisha tender results in {d} district, 2026",
            "description": f"Winning bids for {len(rows_t)} civil tenders in {d} district, Odisha, 2026.", "creator": {"@type": "Organization", "name": BRAND},
            "isBasedOn": "https://tendersodisha.gov.in", "temporalCoverage": "2026-01-03/2026-11-10", "spatialCoverage": f"{d}, Odisha, India"}]
@@ -282,20 +294,17 @@ home_faq = [("Is the tender data official?", "It comes from public pages of tend
             ("What does ‘won at par’ mean?", "The lowest bid was between 0% and −1% of the estimate. In crowded Rural Works tenders many bidders quote exactly at par and the work goes by draw."),
             ("Do you show who will bid on a tender?", "No. Nobody can know that before bids open. We show past results and each bidder’s history so you can price independently."),
             ("Is it free?", "The tender list, BOQ summaries, district and department pages and your own bid profile are free. Rival profiles, the full estimator and alerts are paid.")]
-body = (f'''<section class="hero"><h1>Bid smarter on Odisha tenders</h1><p class="lede">Every 2026 tender result, every regular bidder’s history, and the BOQ of each open tender, in one place. See what wins in your district before you price.</p>
-<p><a class="btn" href="/signup/">Get your free profile</a> <a class="btn ghost" href="/tenders/">Browse open tenders</a></p>
-<div class="kpis"><div><span>Tenders decided in 2026</span><b>{len(T):,}</b></div><div><span>Bids analysed</span><b>{sum(t["npriced"] for t in T):,}</b></div><div><span>Open tenders</span><b>{len([a for a in OPEN if not a["closed"]]):,}</b></div><div><span>BOQs read</span><b>{len(BOQ):,}</b></div></div></section>
-<section><h2>What the numbers say</h2><div class="facts3">
-<div><b>{pct(market([t for t in T if t["seg"]=="Rural Works (CE RW I)"])["med"])}</b><p>Median winning bid in Rural Works. Most are won at par and settled by draw.</p></div>
-<div><b>{pct(market([t for t in T if t["seg"]=="Works Dept (EIC-Civil)"])["med"])}</b><p>Median winning bid in the Works Department, where few bidders fight on price.</p></div>
-<div><b>{pct(market([t for t in T if 3<=t["npriced"]<=7])["med"])}</b><p>Median winning bid when 3–7 contractors bid. With 16+ bidders it is {pct(market([t for t in T if t["npriced"]>=16])["med"])}.</p></div></div></section>
-<section><h2>Closing soon</h2>{tender_rows(closing, 12)}<p><a href="/tenders/">All open tenders →</a></p></section>
-<section><h2>What you get</h2><ul class="cards">
-<li><a href="/tenders/"><b>Open tenders with BOQ breakdown</b><span>Work type and where the money goes, for every tender we can read. Free.</span></a></li>
-<li><a href="/signup/"><b>Your own bid profile</b><span>Every tender you bid in 2026, your %, rank, wins and draws. Free with sign-up.</span></a></li>
-<li><a href="/pricing/"><b>Rival profiles</b><span>What regular bidders in your offices quote and how often they win. Pro.</span></a></li>
-<li><a href="/pricing/"><b>Bid estimator</b><span>Win chance at any bid and the bid with the best expected profit for your costs. Pro.</span></a></li></ul></section>
+body = (f'''<section class="hero"><h1>Find the right Odisha tender, and the right bid</h1>
+<p class="lede">{len([a for a in OPEN if not a["closed"]]):,} open civil tenders, updated twice a day, with what each market usually bids.</p>
+<form class="search" action="/tenders/" method="get" role="search"><input name="q" type="search" placeholder="Search work, place or tender ID" aria-label="Search tenders"><button class="btn" type="submit">Search</button></form></section>
+<section><h2>Closing soon</h2>{tender_rows(closing, 8, fold=99)}<p><a href="/tenders/">See all open tenders →</a></p></section>
+<section><h2>Three things to know before you price</h2><ol class="know">
+<li><b>{pct(market([t for t in T if t["seg"]=="Rural Works (CE RW I)"])["med"])}</b> Rural Works: most tenders are won at par and settled by draw.</li>
+<li><b>{pct(market([t for t in T if t["seg"]=="Works Dept (EIC-Civil)"])["med"])}</b> Works Department: few bidders, real price fights.</li>
+<li><b>{pct(market([t for t in T if 3<=t["npriced"]<=7])["med"])}</b> when 3–7 contractors bid, but {pct(market([t for t in T if t["npriced"]>=16])["med"])} with 16 or more.</li></ol>
+<p class="muted">From {len(T):,} tenders decided in 2026 and {sum(t["npriced"] for t in T):,} bids.</p></section>
 <section><h2>Browse by district</h2><p class="taglist">{" ".join(f'<a href="/districts/{slug(d)}/">{E(d)}</a>' for d in DIST)}</p></section>
+<section class="band"><h2>See what your rivals bid</h2><p>Your own bid history is free. Rival profiles, the bid estimator and alerts are on Pro.</p><p><a class="btn" href="/signup/">Get your free profile</a> <a class="btn ghost" href="/pricing/">See pricing</a></p></section>
 <section><h2>Questions</h2>{"".join(f"<details><summary>{E(q)}</summary><p>{E(a)}</p></details>" for q,a in home_faq)}</section>''')
 page('/', f'{BRAND}: Odisha Tender Results, BOQs and Bid Analysis', 'Open Odisha civil tenders with BOQ breakdowns, 2026 winning-bid patterns by district and department, and bidder intelligence for contractors.',
      body, jsonld=[{"@context": "https://schema.org", "@type": "Organization", "name": BRAND, "url": SITE_URL},
