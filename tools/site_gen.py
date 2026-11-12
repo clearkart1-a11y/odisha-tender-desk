@@ -132,6 +132,16 @@ def tender_rows(rows, limit=400, fold=12, show_dist=True):
     if len(rows) <= fold + 3: return tbl(rows)
     return tbl(rows[:fold]) + f'<details class="more"><summary>Show all {len(rows)} tenders</summary>{tbl(rows[fold:])}</details>'
 
+def map_block(a):
+    place = (a.get('loc') or '').strip()
+    if not place or place.upper() in ('NA', 'N/A', '-'): return ''
+    from urllib.parse import quote
+    q = ', '.join(x for x in [place, a.get('district') or '', 'Odisha'] if x)
+    return (f'<section><h2>Where</h2><p class="muted">Approximate area from the place named in the tender ({E(place)}), not the exact work site.</p>'
+            f'<div class="map"><iframe title="Map of {E(place)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" '
+            f'src="https://maps.google.com/maps?q={quote(q)}&amp;z=11&amp;output=embed"></iframe></div>'
+            f'<p><a href="https://www.google.com/maps/search/?api=1&amp;query={quote(q)}" rel="nofollow noopener" target="_blank">Open in Google Maps →</a></p></section>')
+
 def cta(text='See who usually wins here and what they bid.'):
     return f'<p class="cta-line">{E(text)} <a href="/signup/">Get your free profile →</a></p>'
 
@@ -164,7 +174,7 @@ for a in OPEN:
     body = (f'<h1 class="t">{E(a["title"])}</h1><p class="sub">{E(a["seg"])} · Tender {E(a["id"])}</p>'
             '<div class="keys">' + ''.join(f'<div><span>{k}</span><b>{E(v)}</b></div>' for k, v in key) + '</div>'
             f'<section><h2>How this market bids</h2>{mkt_block(seg_m if seg_m and seg_m["n"]>=5 else seg_only, loc_label)}{cta()}</section>'
-            + boq_html +
+            + boq_html + map_block(a) +
             '<details class="more"><summary>All tender details</summary><dl class="facts">' + ''.join(f'<dt>{E(k)}</dt><dd>{E(v)}</dd>' for k, v in facts if v) + '</dl>'
             '<p class="muted">Download documents and bid only on <a href="https://tendersodisha.gov.in/nicgep/app" rel="nofollow noopener">tendersodisha.gov.in</a>.</p></details>' +
             f'<p class="links">More: <a href="/districts/{slug(a["district"])}/">{E(a["district"])} tenders</a> · <a href="/departments/{slug(a["seg"])}/">{E(a["seg"])}</a>'
