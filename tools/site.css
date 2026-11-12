@@ -46,3 +46,33 @@ form.signup label{font-size:14px;font-weight:600}form.signup .chk{font-weight:40
 .links{margin-top:22px}
 footer{border-top:1px solid var(--line);background:var(--panel);padding-block:20px;font-size:14px;color:var(--muted)}
 .fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}.fine{font-size:12.5px;margin-top:14px}
+/* declutter v2 */
+main.wrap{max-width:900px}
+main section{margin-block:28px}
+h2{font-size:20px}
+h1.t{font-size:clamp(20px,2.6vw,26px);line-height:1.3;margin-top:4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 14px}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0 6px}
+.keys div{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.keys span{display:block;font-size:12px;color:var(--muted)}.keys b{font:600 18px var(--f-body)}
+.say{font-size:16px;max-width:68ch;margin:6px 0}.say .big{font:600 22px var(--f-mono);margin-right:6px}
+.cta-line{font-size:15px;margin:8px 0 0}.cta-line a{font-weight:600}
+details.more{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:14px 0;background:var(--panel)}
+details.more summary{font-weight:600}details.more[open] summary{margin-bottom:10px}
+table.list td{padding-block:10px}table.list td:first-child{min-width:0}
+form.search{display:flex;gap:8px;max-width:620px;margin:6px 0 4px}form.search input{flex:1;font-size:16px;padding:12px}
+ol.know{padding-left:0;list-style:none;display:grid;gap:10px;margin:8px 0}ol.know li{font-size:16px}
+ol.know b{display:inline-block;min-width:88px;font:600 20px var(--f-mono)}
+.band{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}.band h2{margin-top:0}
+.hero h1{max-width:22ch}
+header .wrap,footer .wrap{max-width:900px}
+table.list a{text-decoration:none}table.list a:hover{text-decoration:underline}
+@media (max-width:640px){
+ table.list thead{display:none}
+ table.list,table.list tbody,table.list tr{display:block;width:100%}
+ table.list tr{padding:10px 12px;border-bottom:1px solid var(--line)}
+ table.list td{display:inline;padding:0;border:0;font-size:13px;color:var(--muted)}
+ table.list td:first-child{display:block;font-size:15px;margin-bottom:4px;color:var(--ink)}
+ table.list td:nth-child(n+3)::before{content:" · "}
+ header nav{gap:10px}header nav a{font-size:14px}
+}
